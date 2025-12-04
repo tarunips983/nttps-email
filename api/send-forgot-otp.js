@@ -2,8 +2,20 @@ import { createClient } from "@supabase/supabase-js";
 import nodemailer from "nodemailer";
 
 export default async function handler(req, res) {
-  if (req.method !== "POST")
+  // ✅ CORS HEADERS
+  res.setHeader("Access-Control-Allow-Origin", "https://drnttps.vercel.app");
+  res.setHeader("Access-Control-Allow-Methods", "POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+
+  // Handle preflight request
+  if (req.method === "OPTIONS") {
+    return res.status(200).end();
+  }
+
+  // Allow only POST
+  if (req.method !== "POST") {
     return res.status(405).json({ message: "Method Not Allowed" });
+  }
 
   const { email } = req.body;
 
@@ -17,7 +29,7 @@ export default async function handler(req, res) {
     process.env.SUPABASE_SERVICE_ROLE_KEY
   );
 
-  // 1️⃣ CHECK IF EMAIL EXISTS
+  // 🔍 1. CHECK IF EMAIL EXISTS
   const { data: user, error } = await supabase
     .from("users")
     .select("*")
@@ -25,22 +37,22 @@ export default async function handler(req, res) {
     .single();
 
   if (error || !user) {
-    return res
-      .status(404)
-      .json({ message: "This email is not registered in our system." });
+    return res.status(404).json({
+      message: "This email is not registered in our system.",
+    });
   }
 
-  // 2️⃣ GENERATE OTP
+  // 🔢 2. GENERATE OTP
   const otp = Math.floor(100000 + Math.random() * 900000).toString();
 
-  // 3️⃣ SAVE OTP IN pending_users TABLE
+  // 💾 3. SAVE OTP IN pending_users TABLE
   await supabase.from("pending_users").upsert({
     email,
     otp,
     created_at: new Date().toISOString(),
   });
 
-  // 4️⃣ SEND MAIL
+  // 📧 4. SEND EMAIL
   const transporter = nodemailer.createTransport({
     service: "gmail",
     auth: {
@@ -53,7 +65,6 @@ export default async function handler(req, res) {
     from: "NTTPS Admin <no-reply@nttps.com>",
     to: email,
     subject: "Password Reset OTP",
-    text: `Your OTP is: ${otp}`,
     html: `<h2>Your OTP is:</h2><h1>${otp}</h1>`,
   });
 
